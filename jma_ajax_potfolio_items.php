@@ -92,69 +92,76 @@ add_filter( 'themeblvd_image_sizes', 'jma_ajax_port_image_size' );
 
 
 function display_post_type_nav($post_id = 0){
-	$post_type = 'portfolio_item';
-	$tax = 'portfolio';
-	global $post; 
-	if(!$post_id)
-		$post_id = $post->ID;
-	$terms= get_the_terms($post_id, $tax);
-	if(is_array($terms))//create and array of ids for this post
-		foreach($terms as $term){
-			$this_post_term_ids[] = $term->term_id;
-		}
-	ob_start();
-	$categories = get_terms( $tax, array('hierarchical' => false) );//echo '<pre>';print_r($categories);echo '</pre>';
-	echo '<div class="panel-group post_type-accordion tb-accordion" id="accordion">';
-	foreach ($categories as $category) {
-		$args = array(
-			'post_type' => $post_type,
-			'tax_query' => array(
-				array(
-					'taxonomy' => $tax,
-					'field' => 'id',
-					'terms' => $category->term_id
-				)
-			), 
-			//'orderby' => 'title',
-			//'order' => 'ASC',
-			'posts_per_page' => -1
-			
-		);
-		$x = new WP_Query($args);
-		if($x->have_posts()){
-			if($this_post_term_ids){
-				$in = in_array($category->term_id, $this_post_term_ids)? ' in': '';
-				$trigger = in_array($category->term_id, $this_post_term_ids)? ' active-trigger': '';
-				$sign = in_array($category->term_id, $this_post_term_ids)? 'minus': 'plus';
-			}
-			echo '<div class="tb-toggle panel panel-default">';// panel-default
-			echo '<div class="panel-heading">';//panel-heading
-			echo '<strong>';
-			echo '<a class="post_type-cat ' . $category->slug . $trigger . '" data-toggle="collapse" data-parent="#accordion" href="#jmacollapse' . $category->term_id .  '">';
-			echo '<i class="fa fa-' . $sign . '-circle fa-fw switch-me"></i>';
-			echo $category->name;
-			echo '</a>';
-			echo '</strong>';
-			echo '</div><!--panel-heading-->';
-			echo '<ul id="jmacollapse' . $category->term_id .  '" class="panel-collapse collapse' . $in . '">';
-			while ( $x->have_posts() ) : $x->the_post();
-					$current = get_the_id() == $post_id? ' current': '';
-					echo '<li data-postid="' . get_the_id() . '" class="post-type-link' . $current . '">'; 
-					echo '<a href="';
-					the_permalink();
-					echo '">';
-					the_title();
-					echo '</a>';
-					echo '</li>';
-			endwhile;
-			wp_reset_postdata();
-			echo '</ul></div><!--panel-default-->';
-		}
-	}
-	echo '</div><!--panel-group-->';
-	$x = ob_get_contents();
-	ob_end_clean();
-	echo $x;
+    $post_type = 'portfolio_item';
+    $taxes = array('portfolio', 'portfolio_tag');
+    global $post;
+    if(!$post_id)
+        $post_id = $post->ID;
+    ob_start();
+    foreach ($taxes as $tax){
+        if(count($taxes) > 1){
+            $taxonomy = get_taxonomy($tax);
+            echo '<h2>' . $taxonomy->labels->name . '</h2>';
+            $terms= get_the_terms($post_id, $tax);
+            if(is_array($terms))//create and array of ids for this post
+                foreach($terms as $term){
+                    $this_post_term_ids[] = $term->term_id;
+                }
+        }
+        $categories = get_terms( $tax, array('hierarchical' => false) );//echo '<pre>';print_r($categories);echo '</pre>';
+        echo '<div class="panel-group post_type-accordion tb-accordion" id="accordion">';
+        foreach ($categories as $category) {
+            $args = array(
+                'post_type' => $post_type,
+                'tax_query' => array(
+                    array(
+                        'taxonomy' => $tax,
+                        'field' => 'id',
+                        'terms' => $category->term_id
+                    )
+                ),
+                //'orderby' => 'title',
+                //'order' => 'ASC',
+                'posts_per_page' => -1
+
+            );
+            $x = new WP_Query($args);
+            if($x->have_posts()){
+                if($this_post_term_ids){
+                    $in = in_array($category->term_id, $this_post_term_ids)? ' in': '';
+                    $trigger = in_array($category->term_id, $this_post_term_ids)? ' active-trigger': '';
+                    $sign = in_array($category->term_id, $this_post_term_ids)? 'minus': 'plus';
+                }
+                echo '<div class="tb-toggle panel panel-default">';// panel-default
+                echo '<div class="panel-heading">';//panel-heading
+                echo '<strong>';
+                echo '<a class="post_type-cat ' . $category->slug . $trigger . '" data-toggle="collapse" data-parent="#accordion" href="#jmacollapse' . $category->term_id .  '">';
+                echo '<i class="fa fa-' . $sign . '-circle fa-fw switch-me"></i>';
+                echo $category->name;
+                echo '</a>';
+                echo '</strong>';
+                echo '</div><!--panel-heading-->';
+                echo '<ul id="jmacollapse' . $category->term_id .  '" class="panel-collapse collapse' . $in . '">';
+                while ( $x->have_posts() ) : $x->the_post();
+                    $current = get_the_id() == $post_id? ' current': '';
+                    echo '<li data-postid="' . get_the_id() . '" class="post-type-link' . $current . '">';
+                    echo '<a href="';
+                    the_permalink();
+                    echo '">';
+                    the_title();
+                    echo '</a>';
+                    echo '</li>';
+                endwhile;
+                wp_reset_postdata();
+                echo '</ul></div><!--panel-default-->';
+            }
+        }
+        echo '</div><!--panel-group-->';
+    }
+
+    $x = ob_get_contents();
+    ob_end_clean();
+    echo $x;
 }
 $ajax_options = array(
     array(    
