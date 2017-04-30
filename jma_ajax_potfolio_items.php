@@ -9,14 +9,15 @@ License:
 
 function jma_ajax_input_screens_filter($screens){
 	$screens[] = 'portfolio_item';
+    $screens[] = 'landing_page';
 	return $screens;
 }
 add_filter( 'input_screens_filter', 'jma_ajax_input_screens_filter' );
 
 function jma_ajax_plugin_sidebar_layout( $sidebar_layout ) {
-	if( 'portfolio_item' == get_post_type()) {
+    if( 'portfolio_item' == get_post_type() || 'landing_page' == get_post_type()) {
         $sidebar_layout = 'sidebar_left';
-	}
+    }
     return $sidebar_layout;
  
 }
@@ -32,29 +33,30 @@ function jma_ajax_scripts() {
 
 function jma_ajax_content() {
 	global $jma_spec_options;
+    $ajax_post_id = $_POST['postid'];
 	if(function_exists('jma_get_gallery_field'))
-		$gallery_field = jma_get_gallery_field($_POST['postid']);
-	echo get_the_title($_POST['postid']);
+		$gallery_field = jma_get_gallery_field($ajax_post_id);
+	echo get_the_title($ajax_post_id);
 	echo 'jmasp';
 	$featured = '';
-	if ( has_post_thumbnail( $_POST['postid'] ) ) {
+	if ( has_post_thumbnail( $ajax_post_id ) ) {
 		$featured .= '<div class="featured-item featured-image standard popout">';
-        $featured .= get_the_post_thumbnail( $_POST['postid'], 'large' );
+        $featured .= get_the_post_thumbnail( $ajax_post_id, 'large' );
 		$featured .= '</div>';
     }
-	$content_post = get_post($_POST['postid']);
+	$content_post = get_post($ajax_post_id);
 	$content = $content_post->post_content;
 	$content = apply_filters('the_content', $content);
-	if(function_exists('jma_nivo') && function_exists('get_field') && get_field($gallery_field, $_POST['postid'], false))
-		$content .= jma_nivo(array('acf_field' => $gallery_field,'class'=> 'new', 'post_id' => $_POST['postid']));
+	if(function_exists('jma_nivo') && function_exists('get_field') && get_field($gallery_field, $ajax_post_id, false))
+		$content .= jma_nivo(array('acf_field' => $gallery_field,'class'=> 'new', 'post_id' => $ajax_post_id));
 	$content = str_replace(']]>', ']]&gt;', $content);
 	$content = '<div class="entry-content clearfix">' . $content . '</div>';
 	echo $featured . $content;
 	echo 'jmasp';
-	$use_filter = function_exists('use_full_image') && use_big_slider($_POST['postid'])? 'use_full_image': 'portfolio_header_image_size';
+	$use_filter = function_exists('use_full_image') && use_big_slider($ajax_post_id)? 'use_full_image': 'portfolio_header_image_size';
 	add_filter('header_image_code_size', $use_filter, 10);
 	$header_image_size_string = jma_get_header_image_size_string();
-	echo get_header_image_code($jma_spec_options, $header_image_size_string, $_POST['postid']);
+	echo get_header_image_code($jma_spec_options, $header_image_size_string, $ajax_post_id);
 		
 die();
 }
@@ -68,10 +70,11 @@ function portfolio_header_image_size(){
 
 function jma_ajax_plugin_template_redirect() {
 	//themeblvd_remove_sidebar_location( 'sidebar_left' );
-	if( 'portfolio_item' == get_post_type()) {
+	if( 'portfolio_item' == get_post_type() || 'landing_page' == get_post_type()) {
 		add_action( 'wp_enqueue_scripts', 'jma_ajax_scripts' );
 		add_action('themeblvd_sidebar_sidebar_left_before', 'display_post_type_nav');		
 		add_filter('header_image_code_size', 'portfolio_header_image_size', 10);
+        add_action('wp_footer', 'jma_ajax_script_footer');
 	}
 }
 add_action('template_redirect', 'jma_ajax_plugin_template_redirect');
@@ -92,24 +95,25 @@ add_filter( 'themeblvd_image_sizes', 'jma_ajax_port_image_size' );
 
 
 function display_post_type_nav($post_id = 0){
-    $post_type = 'portfolio_item';
-    $taxes = array('portfolio', 'portfolio_tag');
-    global $post;
-    if(!$post_id)
-        $post_id = $post->ID;
-    ob_start();
+	$post_type = 'portfolio_item';
+	$taxes = array('portfolio', 'portfolio_tag');
+	global $post;
+	if(!$post_id && is_single())
+		$post_id = $post->ID;
+	ob_start();
     foreach ($taxes as $tax){
         if(count($taxes) > 1){
-            $taxonomy = get_taxonomy($tax);
-            echo '<h2>' . $taxonomy->labels->name . '</h2>';
-            $terms= get_the_terms($post_id, $tax);
-            if(is_array($terms))//create and array of ids for this post
-                foreach($terms as $term){
-                    $this_post_term_ids[] = $term->term_id;
-                }
+        $taxonomy = get_taxonomy($tax);
+        echo '<h2>' . $taxonomy->labels->name . '</h2>';
+        $terms= get_the_terms($post_id, $tax);
+        if(is_array($terms))//create and array of ids for this post
+            foreach($terms as $term){
+                $this_post_term_ids[] = $term->term_id;
+            }
         }
-        $categories = get_terms( $tax, array('hierarchical' => false) );//echo '<pre>';print_r($categories);echo '</pre>';
-        echo '<div class="panel-group post_type-accordion tb-accordion" id="accordion">';
+        $categories = get_terms( array( 'taxonomy' =>$tax, 'hierarchical' => false, 'orderby' => 'slug') );//echo '<pre>';print_r($categories);echo
+        // '</pre>';
+        echo '<div class="panel-group post_type-accordion tb-accordion" id="accordion-' . $tax . '">';
         foreach ($categories as $category) {
             $args = array(
                 'post_type' => $post_type,
@@ -120,7 +124,7 @@ function display_post_type_nav($post_id = 0){
                         'terms' => $category->term_id
                     )
                 ),
-                //'orderby' => 'title',
+                //'orderby' => 'slug',
                 //'order' => 'ASC',
                 'posts_per_page' => -1
 
@@ -143,26 +147,50 @@ function display_post_type_nav($post_id = 0){
                 echo '</div><!--panel-heading-->';
                 echo '<ul id="jmacollapse' . $category->term_id .  '" class="panel-collapse collapse' . $in . '">';
                 while ( $x->have_posts() ) : $x->the_post();
-                    $current = get_the_id() == $post_id? ' current': '';
-                    echo '<li data-postid="' . get_the_id() . '" class="post-type-link' . $current . '">';
-                    echo '<a href="';
-                    the_permalink();
-                    echo '">';
-                    the_title();
-                    echo '</a>';
-                    echo '</li>';
+                        $current = get_the_id() == $post_id? ' current': '';
+                        echo '<li data-postid="' . get_the_id() . '" class="post-type-link' . $current . '">';
+                        echo '<a href="';
+                        the_permalink();
+                        echo '">';
+                        the_title();
+                        echo '</a>';
+                        echo '</li>';
                 endwhile;
                 wp_reset_postdata();
                 echo '</ul></div><!--panel-default-->';
             }
         }
         echo '</div><!--panel-group-->';
-    }
+	}
 
-    $x = ob_get_contents();
-    ob_end_clean();
-    echo $x;
+	$x = ob_get_contents();
+	ob_end_clean();
+	echo $x;
 }
+
+function jma_ajax_script_footer(){ ?>
+
+    <script type="text/javascript">
+        jQuery(document).ready(function($){
+            $('.panel-heading').find('a').click(function(){
+                $(this).parents('.panel-group').siblings().find('.panel-default').each(function(){console.log('ddd');
+                    $this = $(this);console.log($this);
+                    $link = $this.find('a');
+                    $link.removeClass('active-trigger');
+                    $link.addClass('collapsed');
+                    $link.attr('aria-expanded','false');
+                    $icon = $this.find('i');
+                    $icon.removeClass('fa-minus-circle');
+                    $icon.addClass('fa-plus-circle');
+                    $this.find('ul').removeClass('in');
+                });
+            });
+        });
+    </script>
+
+<?php }
+
+
 $ajax_options = array(
     array(    
     'name'      => __( 'Category Background Color', 'themeblvd' ),
@@ -361,3 +389,57 @@ function jma_ajax_filter( $dynamic_styles ) {
     return $dynamic_styles;
 }
 add_filter( 'dynamic_styles_filter', 'jma_ajax_filter' );
+
+
+function register_ajax_post_types() {
+
+    $labels = array(
+        'name' => _x( 'Landing Pages', 'themeblvd' ),
+        'singular_name' => _x( 'Landing Page', 'themeblvd' ),
+        'add_new' => _x( 'Add New', 'themeblvd' ),
+        'add_new_item' => _x( 'Add New Landing Page', 'themeblvd' ),
+        'edit_item' => _x( 'Edit Landing Page', 'themeblvd' ),
+        'new_item' => _x( 'New Landing Page', 'themeblvd' ),
+        'view_item' => _x( 'View Landing Page', 'themeblvd' ),
+        'search_items' => _x( 'Search Landing Pages', 'themeblvd' ),
+        'not_found' => _x( 'No Landing Pages found', 'themeblvd' ),
+        'not_found_in_trash' => _x( 'No Landing Pages found in Trash', 'themeblvd' ),
+        'parent_item_colon' => _x( 'Parent Landing Page:', 'themeblvd' ),
+        'menu_name' => _x( 'Landing Pages', 'themeblvd' ),
+    );
+
+    $args = array(
+        'labels' => $labels,
+        'hierarchical' => false,
+        'supports' => array( 'title', 'editor', 'custom-fields', 'thumbnail' ),
+        'public' => true,
+        'show_ui' => true,
+        'show_in_menu' => true,
+        'show_in_nav_menus' => true,
+        'publicly_queryable' => true,
+        'exclude_from_search' => false,
+        'has_archive' => true,
+        'query_var' => true,
+        'can_export' => true,
+        'rewrite' => array( 'slug' => 'project-group'),
+        'capability_type' => 'post'
+    );
+
+    register_post_type( 'landing_page', $args );
+
+}
+
+function add_ajax_portfolio_taxonomies() {
+    register_taxonomy_for_object_type('portfolio', 'landing_page');
+    register_taxonomy_for_object_type('portfolio_tag', 'landing_page');
+}
+function my_ajax_cpt_init() {
+    register_ajax_post_types();
+    add_ajax_portfolio_taxonomies();
+}
+add_action( 'init', 'my_ajax_cpt_init', 999 );
+
+function jma_ajax_rewrite_flush() {
+    flush_rewrite_rules();
+}
+add_action( 'after_switch_theme', 'jma_ajax_rewrite_flush' );
